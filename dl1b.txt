@@ -1,0 +1,81 @@
+import numpy as np
+import matplotlib.pyplot as plt
+from tensorflow.keras import models, layers
+from tensorflow.keras.utils import to_categorical
+from tensorflow.keras.callbacks import EarlyStopping
+
+data = np.load("mnist.npz")
+
+x_train = data["x_train"]
+y_train = data["y_train"]
+x_test = data["x_test"]
+y_test = data["y_test"]
+
+x_train = x_train.astype("float32") / 255.0
+x_test = x_test.astype("float32") / 255.0
+
+x_train = x_train.reshape(-1, 28, 28, 1)
+x_test = x_test.reshape(-1, 28, 28, 1)
+
+y_train = to_categorical(y_train, 10)
+y_test = to_categorical(y_test, 10)
+
+model = models.Sequential([
+    layers.Input(shape=(28, 28, 1)),
+
+    layers.Conv2D(32, 3, padding="same", activation="relu"),
+    layers.BatchNormalization(),
+    layers.MaxPooling2D(),
+    layers.Dropout(0.2),
+
+    layers.Conv2D(64, 3, padding="same", activation="relu"),
+    layers.BatchNormalization(),
+    layers.MaxPooling2D(),
+    layers.Dropout(0.3),
+
+    layers.Flatten(),
+    layers.Dense(128, activation="relu"),
+    layers.Dropout(0.5),
+    layers.Dense(10, activation="softmax")
+])
+
+model.compile(
+    optimizer="adam",
+    loss="categorical_crossentropy",
+    metrics=["accuracy"]
+)
+
+callbacks = [
+    EarlyStopping(patience=7, restore_best_weights=True)
+]
+
+history = model.fit(
+    x_train, y_train,
+    epochs=20,
+    batch_size=64,
+    validation_split=0.2,
+    callbacks=callbacks
+)
+
+loss, accuracy = model.evaluate(x_test, y_test)
+print("Test Loss:", loss)
+print("Test Accuracy:", accuracy)
+
+predictions = model.predict(x_test)
+
+index = 10
+
+plt.imshow(x_test[index].reshape(28, 28), cmap="gray")
+plt.title(
+    f"Predicted: {np.argmax(predictions[index])}\n"
+    f"Actual: {np.argmax(y_test[index])}"
+)
+plt.axis("off")
+plt.show()
+
+plt.plot(history.history["accuracy"], label="Training")
+plt.plot(history.history["val_accuracy"], label="Validation")
+plt.xlabel("Epoch")
+plt.ylabel("Accuracy")
+plt.legend()
+plt.show()

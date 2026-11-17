@@ -1,0 +1,96 @@
+
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+import seaborn as sns
+
+from tensorflow.keras import models, layers
+from tensorflow.keras.callbacks import EarlyStopping
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import MinMaxScaler
+from sklearn.metrics import accuracy_score, confusion_matrix
+
+data = pd.read_csv("ecg.csv", header=None)
+data.dropna(inplace=True)
+
+X = data.iloc[:, :-1].values
+y = data.iloc[:, -1].values.astype(int)
+
+X_train, X_test, y_train, y_test = train_test_split(
+    X, y,
+    test_size=0.2,
+    random_state=42,
+    stratify=y
+)
+
+X_normal = X_train[y_train == 0]
+
+scaler = MinMaxScaler()
+X_normal = scaler.fit_transform(X_normal)
+X_test = scaler.transform(X_test)
+
+input_dim = X_normal.shape[1]
+
+autoencoder = models.Sequential([
+    layers.Input(shape=(input_dim,)),
+
+    # Encoder
+    layers.Dense(64, activation="relu"),
+    layers.Dropout(0.2),
+    layers.Dense(32, activation="relu"),
+    layers.Dense(16, activation="relu"),
+    layers.Dense(8, activation="relu"),
+
+    # Decoder
+    layers.Dense(16, activation="relu"),
+    layers.Dense(32, activation="relu"),
+    layers.Dropout(0.2),
+    layers.Dense(64, activation="relu"),
+    layers.Dense(input_dim, activation="sigmoid")
+])
+
+autoencoder.compile(
+    optimizer="adam",
+    loss="mse"
+)
+
+history = autoencoder.fit(
+    X_normal, X_normal,
+    epochs=20,
+    batch_size=512,
+    validation_split=0.2,
+    callbacks=[
+        EarlyStopping(
+            # monitor="val_loss",
+            patience=5,
+            restore_best_weights=True
+        )
+    ]
+)
+
+plt.plot(history.history["loss"], label="Training")
+plt.plot(history.history["val_loss"], label="Validation")
+plt.xlabel("Epoch")
+plt.ylabel("Loss")
+plt.legend()
+plt.show()
+
+train_pred = autoencoder.predict(X_normal)
+test_pred = autoencoder.predict(X_test)
+
+train_error = np.mean((X_normal - train_pred) ** 2, axis=1)
+test_error = np.mean((X_test - test_pred) ** 2, axis=1)
+
+threshold = np.mean(train_error) + np.std(train_error)
+
+y_pred = (test_error > threshold).astype(int)
+
+print("Threshold:", threshold)
+print("Accuracy:", accuracy_score(y_test, y_pred))
+
+cm = confusion_matrix(y_test, y_pred)
+
+sns.heatmap(cm, annot=True, fmt="d", cmap="Blues")
+plt.xlabel("Predicted")
+plt.ylabel("Actual")
+plt.show()

@@ -1,0 +1,75 @@
+import numpy as np
+import matplotlib.pyplot as plt
+from tensorflow.keras import models, layers
+from tensorflow.keras.callbacks import EarlyStopping
+
+x_train = np.load('/content/x_train.npy')
+y_train = np.load('/content/y_train.npy').reshape(-1)
+x_test = np.load('/content/x_test.npy')
+y_test = np.load('/content/y_test.npy').reshape(-1)
+
+class_names = [
+    "Airplane", "Automobile", "Bird", "Cat", "Deer",
+    "Dog", "Frog", "Horse", "Ship", "Truck"
+]
+
+x_train = x_train.astype("float32") / 255.0
+x_test = x_test.astype("float32") / 255.0
+
+model = models.Sequential([
+    layers.Input(shape=(32, 32, 3)),
+    layers.Flatten(),
+
+    layers.Dense(512, activation="relu"),
+    layers.Dropout(0.3),
+
+    layers.Dense(256, activation="relu"),
+    layers.Dropout(0.3),
+
+    layers.Dense(128, activation="relu"),
+
+    layers.Dense(10, activation="softmax")
+])
+
+model.compile(
+    optimizer="adam",
+    loss="sparse_categorical_crossentropy",
+    metrics=["accuracy"]
+)
+
+early_stop = EarlyStopping(
+    monitor="val_loss",
+    patience=3,
+    restore_best_weights=True
+)
+
+history = model.fit(
+    x_train, y_train,
+    epochs=25,
+    batch_size=128,
+    validation_split=0.2,
+    callbacks=[early_stop]
+)
+
+loss, accuracy = model.evaluate(x_test, y_test)
+print("Test Accuracy:", accuracy)
+
+# Make predictions
+predictions = model.predict(x_test)
+
+index = 10
+
+plt.imshow(x_test[index])
+plt.title(
+    f"Predicted: {class_names[np.argmax(predictions[index])]}, "
+    f"Actual: {class_names[y_test[index]]}"
+)
+plt.axis("off")
+plt.show()
+
+plt.plot(history.history["accuracy"], label="Training")
+plt.plot(history.history["val_accuracy"], label="Validation")
+plt.xlabel("Epoch")
+plt.ylabel("Accuracy")
+plt.legend()
+plt.show()

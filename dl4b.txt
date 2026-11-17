@@ -1,0 +1,106 @@
+import numpy as np
+import tensorflow as tf
+
+from tensorflow.keras.preprocessing.text import Tokenizer, text_to_word_sequence
+from tensorflow.keras.preprocessing.sequence import pad_sequences
+from tensorflow.keras.utils import to_categorical
+from tensorflow.keras import Sequential, Input
+from tensorflow.keras.layers import Embedding, Lambda, Dense, Dropout
+
+data = [
+    "I like natural language processing.",
+    "Computers understand human language.",
+    "Word embeddings represent words.",
+    "CBOW predicts a target word.",
+    "Skip Gram is another model.",
+    "Word2Vec is used in NLP.",
+    "Deep learning uses embeddings.",
+    "CBOW works well with common words."
+]
+
+tokenizer = Tokenizer()
+tokenizer.fit_on_texts(data)
+
+word2id = tokenizer.word_index
+id2word = {v: k for k, v in word2id.items()}
+corpus = tokenizer.texts_to_sequences(data)
+
+vocab_size = len(word2id) + 1
+window_size = 2
+
+def generate_pairs(corpus):
+    for sentence in corpus:
+        for i, target in enumerate(sentence):
+            context = [
+                sentence[j]
+                for j in range(
+                    max(0, i - window_size),
+                    min(len(sentence), i + window_size + 1)
+                )
+                if j != i
+            ]
+
+            x = pad_sequences([context], maxlen=4)
+            y = to_categorical([target], vocab_size)
+
+            yield x, y
+
+cbow = Sequential([
+    Input(shape=(4,)),
+    Embedding(vocab_size, 100),
+    Lambda(lambda x: tf.reduce_mean(x, axis=1)),
+    Dropout(0.2),
+    Dense(vocab_size, activation="softmax")
+])
+
+cbow.compile(
+    optimizer="adam",
+    loss="categorical_crossentropy"
+)
+
+for epoch in range(10):
+    total_loss = 0
+
+    for x, y in generate_pairs(corpus):
+        total_loss += float(cbow.train_on_batch(x, y))
+
+    print(f"Epoch {epoch + 1}: Loss = {total_loss:.3f}")
+
+sentence = input("Enter a sentence: ")
+words = text_to_word_sequence(sentence)
+
+print("Word positions:", list(enumerate(words, start=1)))
+position = int(input("Enter target word position: ")) - 1
+
+if position < 0 or position >= len(words):
+    print("Invalid position")
+
+else:
+    context = [
+        word2id[words[i]]
+        for i in range(
+            max(0, position - window_size),
+            min(len(words), position + window_size + 1)
+        )
+        if i != position and words[i] in word2id
+    ]
+
+    if not context:
+        print("No known context words found")
+
+    else:
+        x = pad_sequences([context], maxlen=4)
+
+        probabilities = cbow.predict(x, verbose=0)[0]
+        probabilities[0] = 0
+
+        predicted_id = np.argmax(probabilities)
+        predicted_word = id2word[predicted_id]
+
+        print("Actual word:", words[position])
+        print("Predicted word:", predicted_word)
+        print(
+            "Probability:",
+            round(float(probabilities[predicted_id]) * 100, 2),
+            "%"
+        )
